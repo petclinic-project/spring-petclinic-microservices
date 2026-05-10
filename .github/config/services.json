@@ -1,0 +1,50 @@
+[
+  {
+    "service": "config-server",
+    "module": "spring-petclinic-config-server",
+    "ecr_repo": "pc-config-server-dev",
+    "port": "8888"
+  },
+  {
+    "service": "discovery-server",
+    "module": "spring-petclinic-discovery-server",
+    "ecr_repo": "pc-discovery-server-dev",
+    "port": "8761"
+  },
+  {
+    "service": "api-gateway",
+    "module": "spring-petclinic-api-gateway",
+    "ecr_repo": "pc-api-gateway-dev",
+    "port": "8080"
+  },
+  {
+    "service": "customers-service",
+    "module": "spring-petclinic-customers-service",
+    "ecr_repo": "pc-customers-service-dev",
+    "port": "8081"
+  },
+  {
+    "service": "visits-service",
+    "module": "spring-petclinic-visits-service",
+    "ecr_repo": "pc-visits-service-dev",
+    "port": "8082"
+  },
+  {
+    "service": "vets-service",
+    "module": "spring-petclinic-vets-service",
+    "ecr_repo": "pc-vets-service-dev",
+    "port": "8083"
+  },
+  {
+    "service": "genai-service",
+    "module": "spring-petclinic-genai-service",
+    "ecr_repo": "pc-genai-service-dev",
+    "port": "8084"
+  },
+  {
+    "service": "admin-server",
+    "module": "spring-petclinic-admin-server",
+    "ecr_repo": "pc-admin-server-dev",
+    "port": "9090"
+  }
+]

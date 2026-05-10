@@ -13,9 +13,11 @@ target/
 # IntelliJ IDEA
 .idea
 *.iml
+.idea/
 
 # Visual Studio Code
 .factorypath
+.vscode/
 
 # Branch switching
 generated/
