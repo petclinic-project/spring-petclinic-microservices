@@ -57,9 +57,8 @@ jobs:
 
               SERVICE_NAME=$(echo $SERVICE | jq -r '.service')
               MODULE_NAME=$(echo $SERVICE | jq -r '.module')
-              SERVICE_PATH="${MODULE_NAME}/"
 
-              if grep -q "^${SERVICE_PATH}" changed_files.txt; then
+              if grep -q "$MODULE_NAME" changed_files.txt; then
                 FILTERED=$(echo $FILTERED | jq ". + [$SERVICE]")
               fi
 
