@@ -1,4 +1,3 @@
-// selective CI/CD test
 
 /*
  * Copyright 2002-2021 the original author or authors.
