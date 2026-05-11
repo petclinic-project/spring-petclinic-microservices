@@ -23,8 +23,11 @@ jobs:
       - name: Detect changed files
         id: changed-files
         run: |
-
-          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git ls-files)
+          else
+            CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+          fi
 
           echo "Changed files:"
           echo "$CHANGED_FILES"
