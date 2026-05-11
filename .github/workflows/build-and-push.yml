@@ -32,6 +32,7 @@ jobs:
 
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         service: ${{ fromJson(needs.discover-services.outputs.matrix) }}
 
