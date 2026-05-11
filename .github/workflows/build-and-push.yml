@@ -106,5 +106,6 @@ jobs:
           git add $DEPLOYMENT_FILE
 
           git commit -m "ci(cd): update ${{ matrix.service.service }} image to ${IMAGE_TAG}" || echo "No changes to commit"
+          git pull --rebase origin develop
 
           git push origin develop
