@@ -19,15 +19,13 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Detect changed files
         id: changed-files
         run: |
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-            CHANGED_FILES=$(git ls-files)
-          else
-            CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
-          fi
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
 
           echo "Changed files:"
           echo "$CHANGED_FILES"
@@ -39,11 +37,6 @@ jobs:
         run: |
           FULL_MATRIX=$(cat .github/config/services.json)
 
-          echo "======================="
-          echo "DEBUG: changed_files.txt"
-          cat changed_files.txt
-          echo "======================="
-
           BUILD_ALL=false
 
           if grep -E "pom.xml|docker/|.github/workflows/" changed_files.txt; then
@@ -53,28 +46,22 @@ jobs:
           if [ "$BUILD_ALL" = true ]; then
             echo "Building all services..."
 
-            MATRIX=$(echo $FULL_MATRIX | jq -c .)
+            MATRIX=$(echo "$FULL_MATRIX" | jq -c .)
 
           else
             FILTERED='[]'
 
-            for SERVICE in $(echo $FULL_MATRIX | jq -c '.[]'); do
+            for SERVICE in $(echo "$FULL_MATRIX" | jq -c '.[]'); do
 
-              echo "Checking service:"
-              echo $SERVICE
-
-              MODULE_NAME=$(echo $SERVICE | jq -r '.module')
-
-              echo "Module name:"
-              echo $MODULE_NAME
+              MODULE_NAME=$(echo "$SERVICE" | jq -r '.module')
 
               if cat changed_files.txt | grep "$MODULE_NAME"; then
-                FILTERED=$(echo $FILTERED | jq ". + [$SERVICE]")
+                FILTERED=$(echo "$FILTERED" | jq ". + [$SERVICE]")
               fi
 
             done
 
-            MATRIX=$(echo $FILTERED | jq -c .)
+            MATRIX=$(echo "$FILTERED" | jq -c .)
           fi
 
           echo "Final matrix:"
@@ -90,14 +77,13 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 1
+
       matrix:
         service: ${{ fromJson(needs.discover-services.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -154,6 +140,7 @@ jobs:
           git clone https://x-access-token:${GITHUB_TOKEN}@github.com/petclinic-project/petclinic-infrastructure.git
 
           cd petclinic-infrastructure
+
           git checkout develop
 
           DEPLOYMENT_FILE=kubernetes/base/${{ matrix.service.service }}/deployment.yaml
@@ -166,6 +153,7 @@ jobs:
           git add $DEPLOYMENT_FILE
 
           git commit -m "ci(cd): update ${{ matrix.service.service }} image to ${IMAGE_TAG}" || echo "No changes to commit"
+
           git pull --rebase origin develop
 
           git push origin develop
