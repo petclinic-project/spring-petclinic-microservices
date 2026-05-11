@@ -39,6 +39,11 @@ jobs:
         run: |
           FULL_MATRIX=$(cat .github/config/services.json)
 
+          echo "======================="
+          echo "DEBUG: changed_files.txt"
+          cat changed_files.txt
+          echo "======================="
+
           BUILD_ALL=false
 
           if grep -E "pom.xml|docker/|.github/workflows/" changed_files.txt; then
@@ -55,10 +60,15 @@ jobs:
 
             for SERVICE in $(echo $FULL_MATRIX | jq -c '.[]'); do
 
-              SERVICE_NAME=$(echo $SERVICE | jq -r '.service')
+              echo "Checking service:"
+              echo $SERVICE
+
               MODULE_NAME=$(echo $SERVICE | jq -r '.module')
 
-              if grep -q "$MODULE_NAME" changed_files.txt; then
+              echo "Module name:"
+              echo $MODULE_NAME
+
+              if cat changed_files.txt | grep "$MODULE_NAME"; then
                 FILTERED=$(echo $FILTERED | jq ". + [$SERVICE]")
               fi
 
