@@ -20,13 +20,59 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Read services config
+      - name: Detect changed files
+        id: changed-files
+        run: |
+          git fetch origin main
+
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
+
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          echo "$CHANGED_FILES" > changed_files.txt
+
+      - name: Generate dynamic matrix
         id: set-matrix
         run: |
-          MATRIX=$(jq -c . .github/config/services.json)
+          FULL_MATRIX=$(cat .github/config/services.json)
+
+          BUILD_ALL=false
+
+          if grep -E "pom.xml|docker/|.github/workflows/" changed_files.txt; then
+            BUILD_ALL=true
+          fi
+
+          if [ "$BUILD_ALL" = true ]; then
+            echo "Building all services..."
+
+            MATRIX=$(echo $FULL_MATRIX | jq -c .)
+
+          else
+            FILTERED='[]'
+
+            for SERVICE in $(echo $FULL_MATRIX | jq -c '.[]'); do
+
+              SERVICE_NAME=$(echo $SERVICE | jq -r '.service')
+              MODULE_NAME=$(echo $SERVICE | jq -r '.module')
+              SERVICE_PATH="${MODULE_NAME}/"
+
+              if grep -q "^${SERVICE_PATH}" changed_files.txt; then
+                FILTERED=$(echo $FILTERED | jq ". + [$SERVICE]")
+              fi
+
+            done
+
+            MATRIX=$(echo $FILTERED | jq -c .)
+          fi
+
+          echo "Final matrix:"
+          echo "$MATRIX"
+
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   build-and-push:
+    if: ${{ needs.discover-services.outputs.matrix != '[]' }}
     needs: discover-services
     runs-on: ubuntu-latest
 
