@@ -1,4 +1,4 @@
-name: Build and Push Microservices
+name: Build and Push Images
 
 on:
   push:
@@ -130,30 +130,3 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
-      - name: Update Kubernetes manifests
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-          GITHUB_TOKEN: ${{ secrets.INFRA_REPO_TOKEN }}
-
-        run: |
-          git clone https://x-access-token:${GITHUB_TOKEN}@github.com/petclinic-project/petclinic-infrastructure.git
-
-          cd petclinic-infrastructure
-
-          git checkout develop
-
-          DEPLOYMENT_FILE=kubernetes/base/${{ matrix.service.service }}/deployment.yaml
-
-          sed -i "s|image: .*|image: 482352877891.dkr.ecr.ap-south-1.amazonaws.com/${{ matrix.service.ecr_repo }}:${IMAGE_TAG}|g" $DEPLOYMENT_FILE
-
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          git add $DEPLOYMENT_FILE
-
-          git commit -m "ci(cd): update ${{ matrix.service.service }} image to ${IMAGE_TAG}" || echo "No changes to commit"
-
-          git pull --rebase origin develop
-
-          git push origin develop
