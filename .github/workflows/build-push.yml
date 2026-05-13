@@ -54,6 +54,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Build JAR
+        run: |
+          chmod +x mvnw
+
+          ./mvnw clean package -DskipTests
+
+          cp \
+            ./${{ matrix.service.module }}/target/*.jar \
+            ./${{ matrix.service.module }}.jar
+
       - name: Build and Push ARM64 Image
         uses: docker/build-push-action@v6
         with:
