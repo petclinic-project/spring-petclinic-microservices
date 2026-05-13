@@ -1,112 +1,44 @@
-name: Update Kubernetes Image Tags
+name: Update Image Tags
 
 on:
-  push:
-    branches:
-      - main
-
-permissions:
-  contents: read
+  workflow_run:
+    workflows:
+      - Build and Push Docker Images
+    types:
+      - completed
 
 jobs:
-  discover-services:
-    runs-on: ubuntu-latest
-
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Detect changed files
-        run: |
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-
-          echo "$CHANGED_FILES" > changed_files.txt
-
-      - name: Generate dynamic matrix
-        id: set-matrix
-        run: |
-          FULL_MATRIX=$(cat .github/config/services.json)
-
-          BUILD_ALL=false
-
-          if grep -E "pom.xml|docker/|.github/workflows/" changed_files.txt; then
-            BUILD_ALL=true
-          fi
-
-          if [ "$BUILD_ALL" = true ]; then
-
-            MATRIX=$(echo "$FULL_MATRIX" | jq -c .)
-
-          else
-            FILTERED='[]'
-
-            for SERVICE in $(echo "$FULL_MATRIX" | jq -c '.[]'); do
-
-              MODULE_NAME=$(echo "$SERVICE" | jq -r '.module')
-
-              if cat changed_files.txt | grep "$MODULE_NAME"; then
-                FILTERED=$(echo "$FILTERED" | jq ". + [$SERVICE]")
-              fi
-
-            done
-
-            MATRIX=$(echo "$FILTERED" | jq -c .)
-          fi
-
-          echo "Final matrix:"
-          echo "$MATRIX"
-
-          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
-
-  update-images:
-    if: ${{ needs.discover-services.outputs.matrix != '[]' }}
-
-    needs: discover-services
+  update-tags:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     runs-on: ubuntu-latest
 
-    strategy:
-      fail-fast: false
-
-      matrix:
-        service: ${{ fromJson(needs.discover-services.outputs.matrix) }}
+    permissions:
+      contents: write
 
     steps:
-      - name: Checkout Infrastructure Repository
+      - name: Checkout Infrastructure Repo
         uses: actions/checkout@v4
         with:
           repository: petclinic-project/petclinic-infrastructure
-          token: ${{ secrets.INFRA_REPO_TOKEN }}
-          path: infrastructure
+          ref: develop
+          token: ${{ secrets.GH_PAT }}
 
-      - name: Update Kubernetes Deployment Image
-        env:
-          IMAGE_TAG: ${{ github.sha }}
-
+      - name: Update Image Tags
         run: |
-          cd infrastructure
+          for FILE in kubernetes/overlays/dev/values/*.yaml
+          do
+            sed -i "s|tag: .*|tag: ${GITHUB_SHA}|g" "$FILE"
+            echo "Updated $FILE"
+          done
 
-          git checkout develop
-
-          DEPLOYMENT_FILE=kubernetes/base/${{ matrix.service.service }}/deployment.yaml
-
-          sed -i "s|image: .*|image: 482352877891.dkr.ecr.ap-south-1.amazonaws.com/${{ matrix.service.ecr_repo }}:${IMAGE_TAG}|g" $DEPLOYMENT_FILE
-
+      - name: Commit Changes
+        run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          git add $DEPLOYMENT_FILE
+          git add .
 
-          git commit -m "ci: update ${{ matrix.service.service }} image to ${IMAGE_TAG}" || echo "No changes to commit"
-
-          git pull --rebase origin develop
+          git commit -m "ci(cd): update image tags to ${GITHUB_SHA}" || echo "No changes"
 
           git push origin develop
