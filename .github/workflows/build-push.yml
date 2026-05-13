@@ -1,132 +1,66 @@
-name: Build and Push Images
+name: Build and Push Docker Images
 
 on:
   push:
     branches:
       - main
 
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
   discover-services:
     runs-on: ubuntu-latest
 
     outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      matrix: ${{ steps.services.outputs.matrix }}
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
 
-      - name: Detect changed files
-        id: changed-files
+      - name: Read services.json
+        id: services
         run: |
-          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
-
-          echo "Changed files:"
-          echo "$CHANGED_FILES"
-
-          echo "$CHANGED_FILES" > changed_files.txt
-
-      - name: Generate dynamic matrix
-        id: set-matrix
-        run: |
-          FULL_MATRIX=$(cat .github/config/services.json)
-
-          BUILD_ALL=false
-
-          if grep -E "pom.xml|docker/|.github/workflows/" changed_files.txt; then
-            BUILD_ALL=true
-          fi
-
-          if [ "$BUILD_ALL" = true ]; then
-            echo "Building all services..."
-
-            MATRIX=$(echo "$FULL_MATRIX" | jq -c .)
-
-          else
-            FILTERED='[]'
-
-            for SERVICE in $(echo "$FULL_MATRIX" | jq -c '.[]'); do
-
-              MODULE_NAME=$(echo "$SERVICE" | jq -r '.module')
-
-              if cat changed_files.txt | grep "$MODULE_NAME"; then
-                FILTERED=$(echo "$FILTERED" | jq ". + [$SERVICE]")
-              fi
-
-            done
-
-            MATRIX=$(echo "$FILTERED" | jq -c .)
-          fi
-
-          echo "Final matrix:"
-          echo "$MATRIX"
-
+          MATRIX=$(jq -c . .github/config/services.json)
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   build-and-push:
-    if: ${{ needs.discover-services.outputs.matrix != '[]' }}
     needs: discover-services
+
     runs-on: ubuntu-latest
 
     strategy:
-      fail-fast: false
-      max-parallel: 1
-
       matrix:
         service: ${{ fromJson(needs.discover-services.outputs.matrix) }}
 
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::482352877891:role/GitHubActionsECRPushRole
+          role-to-assume: ${{ secrets.AWS_GITHUB_ACTIONS_ROLE }}
           aws-region: ap-south-1
 
-      - name: Login to Amazon ECR
-        id: login-ecr
+      - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Push ARM64 Image
+        uses: docker/build-push-action@v6
         with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Build Maven module
-        run: |
-          ./mvnw clean package \
-            -pl ${{ matrix.service.module }} \
-            -am \
-            -DskipTests
-
-      - name: Build Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ matrix.service.ecr_repo }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          cp ${{ matrix.service.module }}/target/*.jar .
-
-          docker build \
-            -f docker/Dockerfile \
-            --build-arg ARTIFACT_NAME=$(basename *.jar .jar) \
-            --build-arg EXPOSED_PORT=${{ matrix.service.port }} \
-            -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG \
-            .
-
-      - name: Push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ matrix.service.ecr_repo }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          context: .
+          file: ./${{ matrix.service.module }}/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            482352877891.dkr.ecr.ap-south-1.amazonaws.com/${{ matrix.service.ecr_repo }}:${{ github.sha }}
+            482352877891.dkr.ecr.ap-south-1.amazonaws.com/${{ matrix.service.ecr_repo }}:latest
