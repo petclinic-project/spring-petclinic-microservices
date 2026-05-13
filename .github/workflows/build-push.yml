@@ -71,7 +71,7 @@ jobs:
           file: ./docker/Dockerfile
           build-args: |
             ARTIFACT_NAME=${{ matrix.service.module }}
-          platforms: linux/arm64
+          platforms: linux/amd64
           push: true
           tags: |
             482352877891.dkr.ecr.ap-south-1.amazonaws.com/${{ matrix.service.ecr_repo }}:${{ github.sha }}
