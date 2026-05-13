@@ -58,7 +58,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./${{ matrix.service.module }}/Dockerfile
+          file: ./docker/Dockerfile
+          build-args: |
+            ARTIFACT_NAME=${{ matrix.service.module }}
           platforms: linux/arm64
           push: true
           tags: |
