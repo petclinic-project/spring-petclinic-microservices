@@ -1,0 +1,198 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, feature/deployment ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: 527582557964
+  ECR_REGISTRY: 527582557964.dkr.ecr.us-east-1.amazonaws.com
+  INFRA_REPO: petclinic-project/petclinic-platform
+
+jobs:
+  build:
+    name: Build Java Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B package -DskipTests --file pom.xml
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            spring-petclinic-*/target/*.jar
+          retention-days: 1
+
+  push-to-ecr:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.set-tag.outputs.image_tag }}
+    steps:
+      - name: Checkout app code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn -B package -DskipTests --file pom.xml
+
+      - name: Set image tag
+        id: set-tag
+        run: echo "image_tag=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::527582557964:role/petclinic-dev-github-actions-role
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push config-server
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-config-server/target/spring-petclinic-config-server-4.0.1 \
+            --build-arg EXPOSED_PORT=8888 \
+            -t $ECR_REGISTRY/petclinic-dev-config-server:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-config-server:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-config-server:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-config-server:latest
+
+      - name: Build and push discovery-server
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-discovery-server/target/spring-petclinic-discovery-server-4.0.1 \
+            --build-arg EXPOSED_PORT=8761 \
+            -t $ECR_REGISTRY/petclinic-dev-discovery-server:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-discovery-server:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-discovery-server:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-discovery-server:latest
+
+      - name: Build and push api-gateway
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-api-gateway/target/spring-petclinic-api-gateway-4.0.1 \
+            --build-arg EXPOSED_PORT=8080 \
+            -t $ECR_REGISTRY/petclinic-dev-api-gateway:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-api-gateway:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-api-gateway:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-api-gateway:latest
+
+      - name: Build and push admin-server
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-admin-server/target/spring-petclinic-admin-server-4.0.1 \
+            --build-arg EXPOSED_PORT=9090 \
+            -t $ECR_REGISTRY/petclinic-dev-admin-server:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-admin-server:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-admin-server:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-admin-server:latest
+
+      - name: Build and push customers-service
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-customers-service/target/spring-petclinic-customers-service-4.0.1 \
+            --build-arg EXPOSED_PORT=8081 \
+            -t $ECR_REGISTRY/petclinic-dev-customers-service:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-customers-service:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-customers-service:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-customers-service:latest
+
+      - name: Build and push vets-service
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-vets-service/target/spring-petclinic-vets-service-4.0.1 \
+            --build-arg EXPOSED_PORT=8083 \
+            -t $ECR_REGISTRY/petclinic-dev-vets-service:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-vets-service:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-vets-service:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-vets-service:latest
+
+      - name: Build and push visits-service
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-visits-service/target/spring-petclinic-visits-service-4.0.1 \
+            --build-arg EXPOSED_PORT=8082 \
+            -t $ECR_REGISTRY/petclinic-dev-visits-service:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-visits-service:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-visits-service:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-visits-service:latest
+
+      - name: Build and push genai-service
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg ARTIFACT_NAME=spring-petclinic-genai-service/target/spring-petclinic-genai-service-4.0.1 \
+            --build-arg EXPOSED_PORT=8084 \
+            -t $ECR_REGISTRY/petclinic-dev-genai-service:${{ steps.set-tag.outputs.image_tag }} \
+            -t $ECR_REGISTRY/petclinic-dev-genai-service:latest .
+          docker push $ECR_REGISTRY/petclinic-dev-genai-service:${{ steps.set-tag.outputs.image_tag }}
+          docker push $ECR_REGISTRY/petclinic-dev-genai-service:latest
+
+  update-infra:
+    name: Update Image Tags in Infra Repo
+    runs-on: ubuntu-latest
+    needs: push-to-ecr
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout infra repo
+        uses: actions/checkout@v4
+        with:
+          repository: petclinic-project/petclinic-platform
+          token: ${{ secrets.INFRA_REPO_TOKEN }}
+          ref: feature/deployment
+
+      - name: Update image tags in kustomization
+        run: |
+          IMAGE_TAG=${{ needs.push-to-ecr.outputs.image_tag }}
+          ECR_REGISTRY=527582557964.dkr.ecr.us-east-1.amazonaws.com
+
+          SERVICES=(
+            "config-server"
+            "discovery-server"
+            "api-gateway"
+            "admin-server"
+            "customers-service"
+            "vets-service"
+            "visits-service"
+            "genai-service"
+          )
+
+          for SERVICE in "${SERVICES[@]}"; do
+            sed -i "s|$ECR_REGISTRY/petclinic-dev-$SERVICE:.*|$ECR_REGISTRY/petclinic-dev-$SERVICE:$IMAGE_TAG|g" \
+              k8s/base/$(ls k8s/base/ | grep $SERVICE) 2>/dev/null || true
+          done
+
+      - name: Commit and push image tag updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add k8s/
+          git diff --staged --quiet || git commit -m "ci: update image tags to ${{ needs.push-to-ecr.outputs.image_tag }}"
+          git push
