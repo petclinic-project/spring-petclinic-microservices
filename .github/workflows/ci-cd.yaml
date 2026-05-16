@@ -4,6 +4,10 @@ on:
   push:
     branches: [ feature/deployment ]
 
+permissions:
+  id-token: write
+  contents: read
+
 env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: 527582557964
