@@ -8,7 +8,7 @@ env:
   AWS_REGION: us-east-1
   AWS_ACCOUNT_ID: 527582557964
   ECR_REGISTRY: 527582557964.dkr.ecr.us-east-1.amazonaws.com
-  INFRA_REPO: petclinic-project/petclinic-platform
+  INFRA_REPO: petclinic-project/Group7-petclinic-project
 
 jobs:
   build:
@@ -162,7 +162,7 @@ jobs:
       - name: Checkout infra repo
         uses: actions/checkout@v4
         with:
-          repository: petclinic-project/petclinic-platform
+          repository: petclinic-project/Group7-petclinic-project
           token: ${{ secrets.INFRA_REPO_TOKEN }}
           ref: feature/deployment
 
